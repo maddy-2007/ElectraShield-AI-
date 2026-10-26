@@ -1,0 +1,6 @@
+timestamp_ms,voltage_v,current_a,temperature_c,humidity_percent,smoke_adc,low_voltage,high_temperature,smoke_detected,scenario
+1000,230.0,1.20,31.0,50.0,400,false,false,false,normal_example
+6000,185.0,1.15,31.2,50.1,410,true,false,false,low_voltage_example
+11000,229.0,1.10,58.0,49.0,420,false,true,false,high_temperature_example
+16000,228.0,1.30,32.0,48.0,2100,false,false,true,smoke_threshold_example
+21000,190.0,1.25,60.0,52.0,2200,true,true,true,multiple_faults_example
