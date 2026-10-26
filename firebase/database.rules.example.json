@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "electrashield": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

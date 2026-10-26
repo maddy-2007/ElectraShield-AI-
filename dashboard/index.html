@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ElectraShield AI Dashboard</title>
+  <style>
+    :root { color-scheme: dark; --panel:#101d34; --line:#263a5c; --text:#eef5ff; --muted:#a9bbd7; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:16px/1.5 system-ui,sans-serif; background:#061020; color:var(--text); }
+    main { max-width:1000px; margin:auto; padding:24px; }
+    h1 { margin-bottom:4px; } .sub { color:var(--muted); margin-top:0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; }
+    .card { border:1px solid var(--line); background:var(--panel); padding:18px; border-radius:14px; }
+    .label { color:var(--muted); font-size:.9rem; } .value { font-size:1.8rem; font-weight:700; overflow-wrap:anywhere; }
+    #status { padding:12px 14px; border-radius:10px; background:#172944; margin:18px 0; }
+    #status.fault { background:#57252d; } table { width:100%; border-collapse:collapse; font-size:.9rem; }
+    th,td { padding:9px; border-bottom:1px solid var(--line); text-align:left; }
+    .table-wrap { overflow-x:auto; } code { color:#9ed5ff; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>ElectraShield AI</h1>
+  <p class="sub">Predict. Protect. Power. · Prototype monitoring dashboard</p>
+  <div id="status">Connecting to Firebase…</div>
+  <section class="grid">
+    <div class="card"><div class="label">Voltage</div><div class="value" id="voltage">—</div></div>
+    <div class="card"><div class="label">Current</div><div class="value" id="current">—</div></div>
+    <div class="card"><div class="label">Temperature</div><div class="value" id="temperature">—</div></div>
+    <div class="card"><div class="label">Humidity</div><div class="value" id="humidity">—</div></div>
+    <div class="card"><div class="label">Smoke sensor ADC</div><div class="value" id="smoke">—</div></div>
+  </section>
+  <h2>Recent readings</h2>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Timestamp (ms uptime)</th><th>Voltage (V)</th><th>Current (A)</th><th>Temp (°C)</th><th>Flags</th></tr></thead>
+      <tbody id="history"><tr><td colspan="5">Waiting for readings…</td></tr></tbody>
+    </table>
+  </div>
+  <p class="sub">Voltage/current values are not meaningful until the sensor conversion factors are calibrated. This dashboard is a prototype, not a safety monitor.</p>
+</main>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { firebaseConfig } from "./firebase-config.js";
+
+  const setText = (id, value) => document.getElementById(id).textContent = value ?? "—";
+  const fmt = (value, suffix = "") => Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}${suffix}` : "—";
+  try {
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    onValue(ref(db, "electrashield/current"), snap => {
+      const d = snap.val();
+      if (!d) { document.getElementById("status").textContent = "No current data yet."; return; }
+      setText("voltage", fmt(d.voltage_v, " V"));
+      setText("current", fmt(d.current_a, " A"));
+      setText("temperature", fmt(d.temperature_c, " °C"));
+      setText("humidity", fmt(d.humidity_percent, " %"));
+      setText("smoke", d.smoke_adc ?? "—");
+      const fault = Boolean(d.low_voltage || d.high_temperature || d.smoke_detected);
+      const status = document.getElementById("status");
+      status.textContent = fault ? "FAULT FLAG ACTIVE — check the physical prototype." : "No configured fault flags in latest sample.";
+      status.className = fault ? "fault" : "";
+    }, error => {
+      document.getElementById("status").textContent = `Firebase read error: ${error.message}`;
+    });
+    onValue(query(ref(db, "electrashield/readings"), limitToLast(10)), snap => {
+      const rows = [];
+      snap.forEach(child => rows.push(child.val()));
+      rows.reverse();
+      const tbody = document.getElementById("history");
+      tbody.replaceChildren();
+      if (!rows.length) {
+        const tr = document.createElement("tr"), td = document.createElement("td");
+        td.colSpan = 5; td.textContent = "No readings available."; tr.append(td); tbody.append(tr); return;
+      }
+      for (const d of rows) {
+        const tr = document.createElement("tr");
+        const flags = [d.low_voltage && "LOW V", d.high_temperature && "HIGH TEMP", d.smoke_detected && "SMOKE"].filter(Boolean).join(", ") || "None";
+        [d.timestamp_ms ?? "—", fmt(d.voltage_v), fmt(d.current_a), fmt(d.temperature_c), flags].forEach(v => {
+          const td = document.createElement("td"); td.textContent = String(v); tr.append(td);
+        });
+        tbody.append(tr);
+      }
+    }, error => console.error("History read error:", error));
+  } catch (error) {
+    document.getElementById("status").textContent = `Setup error: ${error.message}. Copy firebase-config.example.js to firebase-config.js and configure it.`;
+  }
+</script>
+</body>
+</html>
